@@ -10,33 +10,40 @@ The system is evaluated on *public cloud-trace workloads* (e.g., Google Cluster 
 
 ## 📂 Project Structure
 
-src/
-├── __init__.py
-├── migration_daemon.py    # Background service for monitoring and migration
-├── heat_score.py          # File access heat-score computation (LRU, LFU, recency, frequency)
-├── policy.py              # Migration policy logic (when to move SSD→HDD or HDD→SSD)
-├── trace_loader.py        # Loads cloud trace datasets
-├── evaluator.py           # Evaluates migration policy on workloads
-├── storage_sim.py         # Simulated SSD + HDD layers
-├── util.py                # Common helper functions (logging, configs, timers)
+proto/
+└── storage.proto # gRPC message definitions for tier migration API
 
-data/
-├── google_cluster.csv     # Example cloud trace
-├── msr_trace.csv
-└── fiu_trace.csv
+src/
+├── init.py
+├── tier_manager.py # Core tier management logic
+├── policy.py # Policies (LRU, LFU, cost-based, ML-driven)
+├── monitor.py # Access pattern monitoring & statistics
+├── migrator.py # Background migration between tiers
+├── api.py # Client-facing API (FastAPI / REST)
+├── node.py # Runs a storage node with tier manager
+├── util.py # Shared utilities (logging, configs)
+
+tiers/
+├── hot.py # Hot storage (fast, SSD/NVMe simulation)
+├── warm.py # Warm storage (balanced HDD simulation)
+├── cold.py # Cold storage (object/archive simulation)
 
 tests/
-├── test_heat_score.py
-├── test_policy.py
-└── test_integration.py
+├── test_policies.py # Unit tests for placement & eviction policies
+├── test_migration.py # Unit tests for migration logic
+└── test_integration.py # End-to-end tests
 
 benchmarks/
-├── workload_replay.py     # Replays traces against migration policy
-└── analysis.ipynb         # Jupyter notebook for graphs/plots
+├── workload_gen.py # Synthetic workload generator
+├── fault_injection.py # Simulates tier failures, overloads
+└── analysis.ipynb # Plots performance and cost trade-offs
+
+docker/
+├── Dockerfile
+└── docker-compose.yml
 
 requirements.txt
 README.md
-
 
 ---
 
@@ -70,93 +77,69 @@ Heat(file) = α * Frequency + β * Recency
 
 ---
 
+
+---
+
+## ⚙ Core Components
+
+### Tier Manager
+- Decides where to place and migrate data.  
+- Works with monitoring and policies to balance *latency*, *cost*, and *capacity*.  
+
+### Policies
+- *LRU / LFU*: Move frequently accessed data to hot tier.  
+- *Cost-aware*: Optimize placement based on cost vs performance.  
+- *Hybrid / ML-based*: Predictive migration policies.  
+
+### Migration Engine
+- Asynchronously migrates data between tiers.  
+- Ensures consistency and minimal disruption to client requests.  
+
+---
+
 ## 🔄 Workflow
 
-### 1. Monitoring
-- File accesses are monitored in real time (frequency + recency).  
+### 1. Write Operation
+mermaid
+sequenceDiagram
+  participant C as Client
+  participant TM as Tier Manager
+  participant H as Hot Tier
+  participant W as Warm Tier
 
-### 2. Heat Calculation
-- Compute heat score for each file periodically.  
+  C->>TM: Write request (file/block)
+  TM->>H: Place in Hot Tier (default / high-priority)
+  H-->>TM: Stored
+  TM-->>C: ACK
 
-### 3. Migration Decision
-- If SSD is full:  
-- Evict lowest-heat files → HDD.  
-- If hot files in HDD detected:  
-- Promote to SSD.  
+---
+
+### 2. Migration (Hot → Warm → Cold)
+mermaid
+sequenceDiagram
+  participant M as Monitor
+  participant TM as Tier Manager
+  participant H as Hot Tier
+  participant W as Warm Tier
+  participant C as Cold Tier
+
+  M->>TM: Usage stats (access counts, frequency)
+  TM->>H: Select cold data for eviction
+  H->>W: Move to Warm Tier
+  W->>C: Move to Cold Tier (if rarely accessed)
 
 ---
 
 ## 📊 Benchmarks
 
-- **benchmarks/analyze.ipynb** → Plot migration performance.  
-- **benchmarks/heatmap.py** → Show hot/cold distribution.  
-- **benchmarks/histogram.py** → Access frequency distribution.  
+* **benchmarks/workload_gen.py**: Generates synthetic I/O workloads.  
+* **benchmarks/fault_injection.py**: Simulates overloads, failures, and recovery.  
+* **benchmarks/analysis.ipynb**: Plots latency, throughput, tier utilization, and storage cost.  
 
 ---
 
+## 🚀 Running the Project
 
-##  Goal
-- Improve *I/O performance* by storing hot data on SSD.  
-- Reduce *storage costs* by moving cold data to HDD.  
-- Ensure *fair evaluation* using multiple workload traces.  
-- Explore different migration policies: *LRU, LFU, ARC, Heat Score*.
-
----
-
-##  Features
-- *Heat Score Calculation*  
-  - Combines recency and frequency to rank files.  
-
-- *Migration Daemon*  
-  - Background process that monitors file usage and decides promotion/demotion.  
-
-- *Eviction Policy*  
-  - When SSD is full, the coldest files are evicted to HDD.  
-
-- *Evaluation on Cloud Traces*  
-  - Workload datasets from Google, Azure, FIU/MSR.  
-  - Metrics: hit ratio, migration overhead, latency, storage cost.  
-
-- *Optional Enhancements*  
-  - Multi-tier storage (SSD → HDD → Cloud Archive).  
-  - Cost-aware and wear-aware migration.  
-  - Visualization dashboard for file movement and performance.  
-
----
-
-##  Tech Stack
-- *Languages*: Python / C (simulation + implementation)  
-- *Data Structures*:  
-  - Hash Maps (fast lookup of file info)  
-  - Priority Queues / Heaps (for eviction order)  
-  - LRU Cache mechanisms  
-- *Datasets*:  
-  - Google Cluster Trace  
-  - Azure Functions Blob Storage Trace  
-  - FIU/MSR storage workloads  
-
----
-
-##  Evaluation Metrics
-- *Hit Ratio* → Percentage of file accesses served from SSD.  
-- *Migration Overhead* → Number of file moves between SSD and HDD.  
-- *Latency Improvement* → Reduced access time compared to HDD-only.  
-- *Storage Cost Reduction* → Balance between expensive SSD and cheaper HDD.  
-- *SSD Lifetime Impact* → Number of writes affecting endurance.  
-
----
-
-##  Future Scope
-- Machine Learning–based hot file prediction.  
-- Cost + wear-aware hybrid migration policies.  
-- Real-time OS-level integration as a background *storage management daemon*.  
-- Extend to *3-tier storage* (SSD → HDD → Cloud Archive).  
-
----
-
-##  References
-- Google Cluster Trace (2011)  
-- Microsoft Azure Functions + Blob Storage Traces  
-- FIU/MSR Storage Workload Suite  
-
----
+### With Docker
+```bash
+docker-compose up --build
