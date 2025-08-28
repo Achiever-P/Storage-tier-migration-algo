@@ -12,38 +12,42 @@ The system implements a *tier-aware storage manager* where files and blocks are 
 
 ## 📂 Project Structure
 
-storage-tier-management/
-├── proto/
-│   └── storage.proto          # gRPC message definitions for tier migration API
+proto/
+└── tier.proto             # gRPC message definitions (placement, migrate, stats)
 
-├── src/
+src/
+├── __init__.py
+├── api.py                 # Client-facing API (FastAPI / REST)
+├── node.py                # Runs a full node (api + schedulers + metrics)
+├── metadata_store.py      # Object/file metadata (size, age, access freq, tier)
+├── policy_engine.py       # Policy DSL (SLA, cost caps, compliance tags)
+├── tier_manager.py        # Placement decisions (hot/warm/cold) + routing
+├── migrator.py            # Background moves, compaction, recalls
+├── cache_index.py         # LRU/LFU admission & promotion decisions
+├── cost_model.py          # $/GB, IOPS caps, egress penalties
+├── util.py                # Logging, configs, ID generators
+
+├── tiers/
 │   ├── __init__.py
-│   ├── tier_manager.py        # Core tier management logic
-│   ├── policy.py              # Policies (LRU, LFU, cost-based, ML-driven)
-│   ├── monitor.py             # Access pattern monitoring & statistics
-│   ├── migrator.py            # Background migration between tiers
-│   ├── api.py                 # Client-facing API (FastAPI / REST)
-│   ├── node.py                # Runs a storage node with tier manager
-│   ├── util.py                # Shared utilities (logging, configs)
-│   └── tiers/
-│       ├── __init__.py
-│       ├── hot.py             # Hot storage (fast, SSD/NVMe simulation)
-│       ├── warm.py            # Warm storage (balanced HDD simulation)
-│       └── cold.py            # Cold storage (object/archive simulation)
+│   ├── hot_ssd.py         # NVMe/SSD driver
+│   ├── warm_object.py     # Object store driver (S3/GCS compatible)
+│   └── cold_archive.py    # Archive/glacier-like driver
 
-├── tests/
-│   ├── test_policies.py        # Unit tests for placement & eviction policies
-│   ├── test_migration.py       # Unit tests for migration logic
-│   └── test_integration.py     # End-to-end tests
+tests/
+├── test_policy.py
+├── test_tiering_strong.py
+├── test_tiering_eventual.py
+└── test_integration.py
 
-├── benchmarks/
-│   ├── workload_gen.py         # Synthetic workload generator
-│   ├── fault_injection.py      # Simulates tier failures, overloads
-│   └── analysis.ipynb          # Plots performance and cost trade-offs
+benchmarks/
+├── loadgen.py             # Async client load: read/write/mixed/scan
+├── fault_injection.py     # Latency spikes, tier outages, throttling
+└── analysis.ipynb         # Plots: p50/p95 latency, cost, promotion rate
 
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
+docker/
+├── Dockerfile
+└── docker-compose.yml
 
-├── requirements.txt
-└── README.md
+requirements.txt
+README.md
+
