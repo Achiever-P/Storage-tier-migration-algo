@@ -8,6 +8,93 @@ The system is evaluated on *public cloud-trace workloads* (e.g., Google Cluster 
 
 ---
 
+## 📂 Project Structure
+
+src/
+├── __init__.py
+├── migration_daemon.py    # Background service for monitoring and migration
+├── heat_score.py          # File access heat-score computation (LRU, LFU, recency, frequency)
+├── policy.py              # Migration policy logic (when to move SSD→HDD or HDD→SSD)
+├── trace_loader.py        # Loads cloud trace datasets
+├── evaluator.py           # Evaluates migration policy on workloads
+├── storage_sim.py         # Simulated SSD + HDD layers
+├── util.py                # Common helper functions (logging, configs, timers)
+
+data/
+├── google_cluster.csv     # Example cloud trace
+├── msr_trace.csv
+└── fiu_trace.csv
+
+tests/
+├── test_heat_score.py
+├── test_policy.py
+└── test_integration.py
+
+benchmarks/
+├── workload_replay.py     # Replays traces against migration policy
+└── analysis.ipynb         # Jupyter notebook for graphs/plots
+
+requirements.txt
+README.md
+
+
+---
+
+## ⚙ Core Components
+
+### 1. Migration Policy
+- **LRU (Least Recently Used)**: Evict coldest files based on recency.  
+- **LFU (Least Frequently Used)**: Evict coldest files based on frequency.  
+- **Heat Score Formula**:  
+Heat(file) = α * Frequency + β * Recency
+- α, β are tunable weights.  
+- Higher heat → file is “hot” → keep in SSD.  
+- Lower heat → file is “cold” → migrate to HDD.  
+
+### 2. Storage Manager
+- **SSD Tier**: Fast, expensive, limited capacity.  
+- **HDD Tier**: Slow, cheap, large capacity.  
+- Handles file placement, migration, and evictions.  
+
+### 3. Workload Traces
+- **Google Cluster Traces** → large-scale job workloads.  
+- **Azure Blob/Functions Traces** → object storage + serverless workloads.  
+- **FIU/MSR Traces** → enterprise storage access logs.  
+
+### 4. Evaluator
+- Measures:  
+- **Hit Ratio** (requests served from SSD).  
+- **Latency** improvement.  
+- **Evictions/Migrations** overhead.  
+- **Storage Utilization** (SSD vs HDD).  
+
+---
+
+## 🔄 Workflow
+
+### 1. Monitoring
+- File accesses are monitored in real time (frequency + recency).  
+
+### 2. Heat Calculation
+- Compute heat score for each file periodically.  
+
+### 3. Migration Decision
+- If SSD is full:  
+- Evict lowest-heat files → HDD.  
+- If hot files in HDD detected:  
+- Promote to SSD.  
+
+---
+
+## 📊 Benchmarks
+
+- **benchmarks/analyze.ipynb** → Plot migration performance.  
+- **benchmarks/heatmap.py** → Show hot/cold distribution.  
+- **benchmarks/histogram.py** → Access frequency distribution.  
+
+---
+
+
 ##  Goal
 - Improve *I/O performance* by storing hot data on SSD.  
 - Reduce *storage costs* by moving cold data to HDD.  
